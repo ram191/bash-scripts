@@ -1,4 +1,6 @@
 #!/bin/bash
+
+WORKING_DIR=$PWD
 function loading_icon() {
     local load_interval="${1}"
     local loading_message="${2}"
@@ -47,8 +49,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=loki
-ExecStart=/usr/bin/loki -config.file /etc/loki/config.yml
+User=root
+ExecStart=/usr/local/bin/loki -config.file /etc/loki/config.yml
 # Give a reasonable amount of time for the server to start up/shut down
 TimeoutSec = 120
 Restart = on-failure
@@ -58,15 +60,15 @@ RestartSec = 2
 WantedBy=multi-user.target
 EOF
 
-  cat <<EOF > /etc/systemd/system/promtai.service
+  cat <<EOF > /etc/systemd/system/promtail.service
 [Unit]
 Description=Promtail service
 After=network.target
 
 [Service]
 Type=simple
-User=promtail
-ExecStart=/usr/bin/promtail -config.file /etc/promtail/config.yml
+User=root
+ExecStart=/usr/local/bin/promtail -config.file /etc/promtail/config.yml
 # Give a reasonable amount of time for promtail to start up/shut down
 TimeoutSec = 60
 Restart = on-failure
@@ -85,18 +87,21 @@ apt-get update -y > /dev/null
 loading_icon 2 "Installing Loki and Promtail..."
 install
 add_systemd
+mkdir -p /etc/loki
+mkdir -p /etc/promtail
+cd $WORKING_DIR
 
 # Copy the configuration files
 if [ -f /etc/loki/config.yml ]; then
     printf "\nLoki configuration file already exists. Would you like to overwrite it?\n"
     select yn in "Yes" "No"; do
         case $yn in
-            Yes ) cp ./loki-config.yml /etc/loki/config.yaml; break;;
+            Yes ) cp ./loki-config.yml /etc/loki/config.yml; break;;
             No ) break;;
         esac
     done
 else
-    cp ./loki-config.yml /etc/loki/config.yaml
+    cp ./loki-config.yml /etc/loki/config.yml
 fi
 
 if [ -f /etc/promtail/config.yml ]; then
@@ -114,6 +119,13 @@ fi
 # Export the Loki port
 loading_icon 2 "Exposing Loki port"
 sudo iptables -A INPUT -p tcp --dport 3100 -j ACCEPT
+
+# Start systemd
+systemctl enable loki
+systemctl enable promtail
+
+systemctl start loki
+systemctl start promtail
 
 printf "\n\nInstallation complete!\n"
 cat << "EOF"
